@@ -17,6 +17,7 @@ dir = "/Users/gabe/Desktop/autoanonymization/"
 
 def video_to_frames(input_video_file):
     vidcap = cv2.VideoCapture(input_video_file)
+    fps = vidcap.get(cv2.CAP_PROP_FPS)
     _,image = vidcap.read()
     count = 0
     success = True
@@ -32,25 +33,32 @@ def video_to_frames(input_video_file):
         image = flatlist_to_tuplelist(image)
 
         im.putdata(image)
-        h = highlight_faces(im,loc)
-        #hi_im_list.append(h)
+        h = blur_faces(im)
+        hi_im_list.append(h)
 
         success,image = vidcap.read()
-        count += 1
-
         print(count,"total time",time.time()-st)
+        count += 1
     # Define the codec and create VideoWriter object
-    #fourcc = cv2.VideoWriter_fourcc(*'XVID')
-    #out = cv2.VideoWriter('output.avi',fourcc, 20.0, sz)
-    #for hi_im in hi_im_list:
+    fourcc = cv2.VideoWriter_fourcc(*'XVID')
+    out = cv2.VideoWriter('output.avi',fourcc, fps, sz)
+    for hi_im in hi_im_list:
         #TODO: make a function that converts im to numpy array
-        #out.write(hi_im)
-    #out.release()
-    #cv2.destroyAllWindows()
+        arr = im_to_numpy_array(hi_im)
+        out.write(arr)
+    out.release()
+    cv2.destroyAllWindows()
 
 
 def im_to_numpy_array(im):
     lst = []
+    pix_val = list(im.getdata())
+    width, height = im.size
+    for w in range(0,len(pix_val),width):
+        sublist = pix_val[w:w+width]
+        #print("~~~~~~~~~~~~~~~~~~~")
+        #print(sublist)
+        lst.append(sublist)
     numpy_array = np.array(lst)
     return numpy_array
 
@@ -64,7 +72,7 @@ def flatlist_to_tuplelist(image):
     st = time.time()
     for i in range(0,n,3):
         res.append(tuple((flatlist[i+2],flatlist[i+1],flatlist[i],255)))
-    print("---convert image to tuple list:",(time.time()-st))
+    #print("---convert image to tuple list:",(time.time()-st))
 
     return res
 
@@ -73,19 +81,19 @@ def image_to_byte_array(image):
 
     st = time.time()
     image.save(imgByteArr, format=image.format)
-    print("---image_to_byte_array:",time.time()-st)
+    #print("---image_to_byte_array:",time.time()-st)
 
     imgByteArr = imgByteArr.getvalue()
     return imgByteArr
 
 
-def detect_face(im, max_results=4):
+def detect_face(im, max_results=100):
     """
     Uses the Vision API to detect faces in the given file.
 
     Args:
-        face_file: A file-like object containing an image with faces.
-
+        im: A file-like object containing an image with faces.
+        max_results:
     Returns:
         An array of Face objects with information about the picture.
     """
@@ -96,7 +104,7 @@ def detect_face(im, max_results=4):
 
     st = time.time()
     res = client.face_detection(image=image, max_results=max_results).face_annotations
-    print("---client:",time.time()-st)
+    #print("---client:",time.time()-st)
 
     return res
 
@@ -105,8 +113,6 @@ def highlight_faces(im, output_filename=None):
 
     Args:
       image: a file containing the image with the faces.
-      faces: a list of faces found in the file. This should be in the format
-          returned by the Vision API.
       output_filename: the name of the image file to be created, where the
           faces have polygons drawn around them.
     """
@@ -123,12 +129,12 @@ def highlight_faces(im, output_filename=None):
     if output_filename!=None:
         st = time.time()
         im.save(output_filename)
-        print("---saving photo:",time.time()-st)
+        #print("---saving photo:",time.time()-st)
         return None
     else:
         return im
 
-def blur_faces(im, output_filename,filter_width=16):
+def blur_faces(im, output_filename=None,filter_width=16):
     """Draws a polygon around the faces, then saves to output_filename.
 
     Args:
@@ -146,75 +152,69 @@ def blur_faces(im, output_filename,filter_width=16):
         res.append(sublist)
     pix_val = res
     # Sepecify the font-family and the font-size
-    for face in detect_face(im):
-        box = [(vertex.x, vertex.y)
-               for vertex in face.bounding_poly.vertices]
+    faces = detect_face(im)
+    st = time.time()
+    for face in faces:
+        #corners
+        box = [(vertex.x, vertex.y) for vertex in face.bounding_poly.vertices]
         x_left = box[0][0]
         x_right = box[1][0]
         y_top = box[0][1]
         y_bottom = box[2][1]
-        res = []
-        for h in range(y_top,y_bottom+1):
-            row = []
-            for w in range(x_left,x_right+1):
-                row.append(pix_val[h][w])
-            res.append(row)
-        res = blur_region(res,filter_width)
-        for h in range(0,y_bottom+1-y_top):
-            for w in range(0,x_right+1-x_left):
-                pix_val[h+y_top][w+x_left] = res[h][w]
+
+        blur_region(pix_val,x_left,x_right,y_top,y_bottom,filter_width)
+
+    #print(pix_val)
     pxl = list(itertools.chain.from_iterable(pix_val))
     im2 = Image.new(im.mode, im.size)
     im2.putdata(pxl)
-    im2.save(output_filename)
+    if output_filename==None:
+        im2.save(output_filename)
+        #print(time.time()-st)
+    return im2
 
-def blur_region(pixel_list,filter_width):
+def blur_region(pix_val,x_left,x_right,y_top,y_bottom,filter_width):
 
-    def average_rgb(pixel_list):
-        n = len(pixel_list)
-        r_sum = 0
-        g_sum = 0
-        b_sum = 0
-        for px in pixel_list:
-            r_sum = r_sum + px[0]
-            g_sum = g_sum + px[1]
-            b_sum = b_sum + px[2]
-        r = int(r_sum/n)
-        g = int(g_sum/n)
-        b = int(b_sum/n)
-        return (r,g,b,255)
+    for h in range(y_top,y_bottom+1,filter_width):
+        for w in range(x_left,x_right+1,filter_width):
 
-    for i in range(0,len(pixel_list),filter_width):
-        for j in range(0,len(pixel_list[0]),filter_width):
-            l = []
             r_sum = 0
             g_sum = 0
             b_sum = 0
+            n = 0
             for x in range(0,filter_width):
-                if i+x<len(pixel_list):
+                if h+x<len(pix_val):
+                    row = pix_val[h+x]
                     for y in range(0,filter_width):
-                        if j+y<len(pixel_list[0]):
-                            r_sum = r_sum + pixel_list[i+x][j+y][0]
-                            g_sum = g_sum + pixel_list[i+x][j+y][1]
-                            b_sum = b_sum + pixel_list[i+x][j+y][2]
-            val = average_rgb(l)
+                        pixel = row[w+y]
+                        if w+y<len(pix_val[0]):
+                            r_sum = r_sum + pixel[0]
+                            g_sum = g_sum + pixel[1]
+                            b_sum = b_sum + pixel[2]
+                            n = n + 1
+            val = (int(r_sum/n),int(g_sum/n),int(b_sum/n),255)
             for x in range(0,filter_width):
-                if i+x<len(pixel_list):
+                if h+x<len(pix_val):
                     for y in range(0,filter_width):
-                        if j+y<len(pixel_list[0]):
-                            pixel_list[i+x][j+y] = val
-    return pixel_list
+                        if w+y<len(pix_val[0]):
+                            pix_val[h+x][w+y] = val
+    return pix_val
 
 
 
-input_file = dir + "fake_ai_faces.0.png"
+input_file = dir + "class_photo_2.jpg"
 
 output_file = dir + "out_3.png"
 
 movie = dir + "movie.mp4"
 
+if os.path.exists(output_file):
+    os.remove(output_file)
+
 im = Image.open(input_file)
 
-#highlight_faces(im,output_file)
+
+
+#blur_faces(im,output_file)
 
 video_to_frames(movie)
