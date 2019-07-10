@@ -33,8 +33,8 @@ def video_to_frames(input_video_file):
         image = flatlist_to_tuplelist(image)
 
         im.putdata(image)
-        h = blur_faces(im)
-        hi_im_list.append(h)
+        hi_im = blur_faces(im)
+        hi_im_list.append(im_to_numpy_array(hi_im))
 
         success,image = vidcap.read()
         print(count,"total time",time.time()-st)
@@ -42,9 +42,11 @@ def video_to_frames(input_video_file):
     # Define the codec and create VideoWriter object
     fourcc = cv2.VideoWriter_fourcc(*'XVID')
     out = cv2.VideoWriter('output.avi',fourcc, fps, sz)
+    hi_im_list = np.array(hi_im_list)
+    np.save(dir+"frames.np",hi_im_list)
     for hi_im in hi_im_list:
         #TODO: make a function that converts im to numpy array
-        arr = im_to_numpy_array(hi_im).astype(np.uint8)
+        arr = hi_im.astype(np.uint8)
         out.write(arr)
     out.release()
     cv2.destroyAllWindows()
