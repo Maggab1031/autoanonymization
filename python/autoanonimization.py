@@ -44,7 +44,7 @@ def video_to_frames(input_video_file):
     out = cv2.VideoWriter('output.avi',fourcc, fps, sz)
     for hi_im in hi_im_list:
         #TODO: make a function that converts im to numpy array
-        arr = im_to_numpy_array(hi_im)
+        arr = im_to_numpy_array(hi_im).astype(np.uint8)
         out.write(arr)
     out.release()
     cv2.destroyAllWindows()
