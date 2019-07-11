@@ -25,29 +25,20 @@ def video_to_frames(input_video_file):
     im = Image.new("RGBA", sz)
     im.format = "PNG"
     hi_im_list = []
+    fourcc = cv2.VideoWriter_fourcc(*'XVID')
+    out = cv2.VideoWriter('output.avi',fourcc, fps, sz)
     while success:
         loc = dir + "frames/frame_"+str(count)+".png"
-
         st = time.time()
-
         image = flatlist_to_tuplelist(image)
-
         im.putdata(image)
         hi_im = blur_faces(im)
-        hi_im_list.append(im_to_numpy_array(hi_im))
-
+        arr = im_to_numpy_array(hi_im).astype(np.uint8)
+        out.write(arr)
         success,image = vidcap.read()
         print(count,"total time",time.time()-st)
         count += 1
     # Define the codec and create VideoWriter object
-    fourcc = cv2.VideoWriter_fourcc(*'XVID')
-    out = cv2.VideoWriter('output.avi',fourcc, fps, sz)
-    hi_im_list = np.array(hi_im_list)
-    np.save(dir+"frames.np",hi_im_list)
-    for hi_im in hi_im_list:
-        #TODO: make a function that converts im to numpy array
-        arr = hi_im.astype(np.uint8)
-        out.write(arr)
     out.release()
     cv2.destroyAllWindows()
 
